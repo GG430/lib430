@@ -6,23 +6,23 @@
 *                               |  |                 |                                         *
 *                               ---|DVCC         DVSS|--|                                      *
 *                                  |                 |                                         *
-*                              L---|P1.0          XIN|----                                     *
-*                                  |                 |  32.768kHz                              *
-*                              E---|P1.1         XOUT|----                                     *
+*                              L---|P1.0          XIN|---- 32.768kHz from SiT1552              *
+*                                  |                 |                                         *
+*                              E---|P1.1         XOUT|-                                        *
 *                                  |                 |          /|\                            *
-*                              D---|P1.2          TST|-          |                             *
-*                                  |                 |           |                             *
-*                              S---|P1.3          RST|----R56k----                             *
+*                              D---|P1.2          TST|-          |        o   o RED            *
+*                                  |                 |           |        Long Cable           *
+*                              S---|P1.3          RST|----R56k----        o   o                *
 *                                  |                 |    Mode                                 *
 *                                 -|P1.4         P1.7|----/ -----|                             *
 *                                  |                 |    Set                                  *
 *                                 -|P1.5         P1.6|----/ -----|                             *
 *                                  |                 |                                         *
-*                        Moon   |--|P2.0         P2.5|--|   Sun                                *
-*                      |--|<|---|  |                 |  |---|>|---|                            *
-*                               |--|P2.1         P2.4|--|                                      *
-*                                  |                 |                                         *
-*                                 -|P2.2         P2.3|-----||-----|                            *
+*                                 -|P2.0         P2.5|--|   Sun                                *
+*                                  |                 |  |---|>|---|                            *
+*                        Moon   |--|P2.1         P2.4|--|                                      *
+*                      |--|<|---|  |                 |                                         *
+*                               |--|P2.2         P2.3|-----||-----|                            *
 *                                  |                 |                                         *
 *                                   -----------------                                          *
 *                                                                                              *
@@ -32,12 +32,12 @@
 * TimerA1 is used for the PWM of Sun and Moon LEDs                                             *
 *                                                                                              *
 * Device:   MSP430G2553                                                                        *
-* Version:  1.0.4                                                                              *
-* Compiler: IAR Embedded Workbench IDE V.5.51 (TI: V6.40)                                      *
+* Version:  1.2.2 - WDT divider 8192 for MEMS                                                  *
+* Compiler: IAR Embedded Workbench IDE V.5.60.7                                                *
 *                                                                                              *
 * COPYRIGHT:                                                                                   *
 * Author:   Gerald Gradl                                                                       *
-* Date:     01/2013                                                                            *
+* Date:     03/2014                                                                            *
 *                                                                                              *
 * This program is free software: you can redistribute it and/or modify it under the terms of   *
 * the GNU General Public License as published by the Free Software Foundation, either          *
@@ -51,7 +51,12 @@
 * If not, see <http://www.gnu.org/licenses/>.                                                  *
 \**********************************************************************************************/
 
-#include  "msp430g2553.h"
+//#include  "msp430g2553.h"
+#include <msp430.h>
+
+#define Version 0x0122
+#define VersionLocation 0x0FFFF-RESET_VECTOR-3
+__root static const int x@VersionLocation = Version;
 
 // Charlieplexed LEDs
 #define LED_MASK 0x0F // 12 LEDs, 4 IO lines, n = 4, number of LEDS = n x (n-1)
@@ -132,18 +137,27 @@ void MinuteView();
 void measure_count(void);                   // Measures each capacitive sensor
 void pulse_LED(void);                       // LED gradient routine
 void CapTouch();
+void measure_baseline(void);
 
 /* Sensor settings*/
-#define KEY_LVL    100                     // Defines threshold for a key press
+#define KEY_LVL    300                     // Defines threshold for a key press
 /*Set to ~ half the max delta expected*/
 
-#define LightTime  30
+#define DCO8MHZ
+#define LightTime  5
 #define MoonLight  368                     // TimerA PWM lower value
-#define SunLight   100                     // TimerA PWM lower value
+#define SunLight   368                     // TimerA PWM lower value
+
+#define QRZ
+//#define MEMS
+#ifndef QRZ
+#define QRZ
+#endif
 
 // Global variables for sensing
 unsigned int base_cnt;
 unsigned int meas_cnt;
+unsigned int meas_cnt_temp;
 int delta_cnt;
 unsigned char key_press;
 char key_pressed;
@@ -151,11 +165,6 @@ int cycles;
 
 #define ON 1
 #define OFF 0
-
-#define Version 0x0104
-#define VersionLocation 0x0FFFF-RESET_VECTOR-3
-
-__root static const int x@VersionLocation = Version;
 
 void main(void)
 {
@@ -186,23 +195,16 @@ void main(void)
   P1OUT |= BIT4 + BIT5;         // P1OUT = pullup
   P2REN |= BIT0;                // P2REN = pullup/down enable
   P2OUT |= BIT0;                // P2OUT = pullup
-  P2OUT |= BIT3;
-  P2DIR |= BIT3;
+  //P2OUT |= BIT3;
+  //P2DIR |= BIT3;
   P3REN = 0xFF;                 // Tie all P3 ports which are not available on N package
   P3OUT = 0xFF;
 
-  WDTCTL = WDTPW + WDTTMSEL + WDTCNTCL + WDTSSEL; // watchdog counter mode, ACLK, /32768
+  WDTCTL = WDTPW + WDTTMSEL + WDTCNTCL + WDTSSEL + WDTIS0; // watchdog counter mode, ACLK, /32768
   IFG1 &= ~WDTIFG;              // Clear WDT interrupt flag
   IE1 |= WDTIE;                 // WDT interrupt enable
 
-  measure_count();              // Establish baseline capacitance
-    base_cnt = meas_cnt;
-
-  for(i=15; i>0; i--)           // Repeat and avg base measurement
-  {
-    measure_count();
-      base_cnt = (meas_cnt+base_cnt)/2;
-  }
+  measure_baseline();
 
 
 /******************************************************************************/
@@ -216,13 +218,9 @@ void main(void)
       switch(state)
         {
           case NORMAL:
-            if (capsense)
-            {
-              CapTouch();
-            }
             if (LEDState==ON)
             {
-                HourView();
+                  HourView();
             }
             if (LEDState==ON && ((hour24>=7) && (hour24<18)))
                 {
@@ -234,7 +232,10 @@ void main(void)
                   SunOff();
                   MoonOn();
                 }
-
+            if (capsense)
+            {
+              CapTouch();
+            }
             break;
           case SET_HOUR:
             capsense=OFF;
@@ -277,12 +278,9 @@ void main(void)
                {
                DEMOPointer=1;
                }
-
             break;
-
         }
   }
-
 } // main()
 
 
@@ -291,22 +289,47 @@ void main(void)
 /******************************************************************************/
 void configureClocks()
 {
-// Set system DCO to 8MHz
-BCSCTL1 = CALBC1_8MHZ;
-DCOCTL = CALDCO_8MHZ;
-BCSCTL3 |= LFXT1S_0;                        // 32kHz Crystal as source for ACLK
-BCSCTL3 |= XCAP_2;                          // 10pF Caps
+if (CALBC1_1MHZ != 0xFF && CALBC1_8MHZ != 0xFF && CALBC1_12MHZ != 0xFF && CALBC1_16MHZ != 0xFF) 
+    {                                           // Security feature for no DCO Cal present
+      BCSCTL1 = 0;                                    // Bug Fix
+      #ifdef DCO1MHZ                                  // Set DCO to 1MHz calibration
+      BCSCTL1 = CALBC1_1MHZ;
+      DCOCTL = CALDCO_1MHZ;
+      #endif
+
+      #ifdef DCO8MHZ                                  // Set DCO to 8MHz calibration
+      BCSCTL1 = CALBC1_8MHZ;
+      DCOCTL = CALDCO_8MHZ;
+      #endif
+
+      #ifdef DCO12MHZ                                 // Set DCO to 12MHz calibration
+      BCSCTL1 = CALBC1_12MHZ;
+      DCOCTL = CALDCO_12MHZ;
+      #endif
+
+      #ifdef DCO16MHZ                                 // Set DCO to 16MHz calibration
+      BCSCTL1 = CALBC1_16MHZ;
+      DCOCTL = CALDCO_16MHZ;
+      #endif
+    }
+
+#ifdef MEMS
+BCSCTL3 |= LFXT1S_3;                        // 32kHz external source for ACLK
+#endif
+#ifdef QRZ
+BCSCTL3 &= ~XCAP0;                          // 10pF Caps
+BCSCTL3 |= XCAP1;                           // 10pF Caps
+#endif
 //P1DIR |= BIT0;                            // Debug: ACLK @ P1.0
 //P1SEL |= BIT0;                            // Debug: ACLK @ P1.0
-/*
+
  do
   {
-    IFG1 &= ~OFIFG;                         // Clear OSCFault flag
-    for (i = 0xFF; i > 0; i--);             // Time for flag to set
+    BCSCTL3 &= ~LFXT1OF;                     // Clear OSCFault flag
+    for (i = 0x1FFF; i > 0; i--);             // Time for flag to set
   }
- while (IFG1 & OFIFG);                      // OSCFault flag still set?
-*/
- IFG1 &= ~OFIFG;                           // Clear OSCFault flag
+ while(BCSCTL3 & LFXT1OF);
+
 }
 /******************************************************************************/
 void delaylong(unsigned int k)
@@ -327,16 +350,29 @@ void delay(unsigned int k)
   for(i=0;i<k;i++);
 }
 /******************************************************************************/
-void delay_us(unsigned long k)
+void delay_us(unsigned long delay)
 {
   unsigned long i;
-  unsigned long Freq;
-  Freq = 8000000;
-  Freq = Freq / 1000000;
-  k = k*Freq;
-  k = (((k-14)/3)+1);
+  
+  #ifdef DCO1MHZ
+  delay = 1;
+  #endif
+  
+  #ifdef DCO8MHZ
+  delay = delay*8;
+  #endif
+    
+  #ifdef DCO12MHZ
+  delay = delay*12;
+  #endif
+    
+  #ifdef DCO16MHZ
+  delay = delay*16;
+  #endif
+  
+  delay = (((delay-14)/3)+1);
 
-  for(i=0;i<k;i++);
+  for(i=0;i<delay;i++);
 }
 
 /******************************************************************************/
@@ -382,27 +418,28 @@ void LEDOff()
 /******************************************************************************/
 void init_PWM_TimerA(void)
 {
-  TA1CTL = TASSEL_2 + ID_3 + TACLR;                                                // ACLK, Clear Tar
-  //Sonne
+  //TA1CTL = TASSEL_2 + ID_3 + TACLR;                                              // SMCLK, /8, Clear Tar
+  TA1CTL = TASSEL_2 + TACLR;                                                       // SMCLK, Clear Tar
+  //TA1CTL = TASSEL_1 + TACLR;                                                     // SMCLK, Clear Tar
   TA1CCR0 = 512-1;                                                                 // PWM Period
+  //Sonne
   TA1CCR2 = SunLight;                                                              // CCR1 PWM duty cycle
   TA1CCTL2 = OUTMOD_3;                                                             // CCR1 reset/set
   //Mond
   TA1CCR1 = MoonLight;                                                             // CCR1 PWM duty cycle
   TA1CCTL1 = OUTMOD_3;                                                             // CCR1 reset/set
+  TA1CTL |= MC_1;
 }
 
 /******************************************************************************/
 void SunOn(void)
 {
-  TA1CTL |= MC_1;
   P2SEL2 &= ~BIT4 + ~BIT5;
   P2SEL |= BIT4 + BIT5;
   P2DIR |= BIT4 + BIT5;
 }
 void MoonOn(void)
 {
-  TA1CTL |= MC_1;
   P2SEL2 &= ~BIT1 + ~BIT2;
   P2SEL |= BIT1 + BIT2;
   P2DIR |= BIT1 + BIT2;
@@ -468,58 +505,64 @@ void HourView(void)
 /******************************************************************************/
 void CapTouch(void)
 {
-    unsigned char m = KEY_LVL;
-    key_pressed = 0;                        // Assume no keys are pressed
-    measure_count();                        // Measure sensor
+    measure_count();
 
-    {
-      delta_cnt = base_cnt - meas_cnt;  	// Calculate delta: c_change
+    meas_cnt_temp = meas_cnt;
 
-      /* Handle baseline measurment for a base C decrease*/
-      if (delta_cnt < 0)                 	// If negative: result increased
-      {                                     // beyond baseline, i.e. cap dec
-          base_cnt = (base_cnt+meas_cnt) >> 1; // Re-average quickly
-          delta_cnt = 0;                 	// Zero out for pos determination
+	  	for(i=5; i>0; i--)
+	  	  {
+	    	 measure_count();
+	      	 meas_cnt_temp = (meas_cnt+meas_cnt_temp)/2;
+	      }
+
+    meas_cnt = meas_cnt_temp;
+
+    delta_cnt = base_cnt - meas_cnt;
+
+    if (delta_cnt < 0)
+      {
+         base_cnt = (base_cnt+meas_cnt) >> 1;
       }
-      if (delta_cnt > m)                 	// Determine if each key is pressed
-      {                                  	// per a preset threshold
-        m = delta_cnt;
-        key_pressed = 1;                  	// key pressed
+    else if (delta_cnt > KEY_LVL)
+      {
+          capsense = OFF;
+          LEDState = ON;
       }
-      else
-        key_pressed = 0;
-    }
-
-    /* Handle baseline measurment for a base C increase*/
-    if (!key_pressed)                       // Only adjust baseline down
-    {                                       // if no keys are touched
-        base_cnt = base_cnt - 1;            // Adjust baseline down, should be
-    }                                       // slow to accomodate for genuine
-                                            // changes in sensor C
-    if (key_pressed == 1)
-    {
-        capsense = OFF;
-        LEDState = ON;
-    }
-  }
+    else
+      {
+          base_cnt = base_cnt - 1;
+          key_pressed = OFF;
+      }
+}
 
 /******************************************************************************/
 void measure_count(void)
 {
     _DINT();                              	// Disable interrupts
-    P2DIR &= ~BIT3;           				//
-    P2SEL &= ~BIT3;           				//
-    P2SEL2 |= BIT3;            				// Set target Pin Oscillator
-    TA0CTL = TASSEL_3 + ID_0 + TACLR;
-    TA0CCTL0 = CM_1 + CCIS_1 + CAP;     	// Capture on Pos Edges
-    TA0CTL |= MC_2;							// Start Timer
-    delay(10000);							// Make artificial delay to capture capacitive sensing oscillator edges while SMCLK runs TimerA
+    P2DIR &= ~BIT3;           			//
+    P2SEL &= ~BIT3;           			//
+    P2SEL2 |= BIT3;            			// Set target Pin Oscillator on P2.3
+    TA0CTL = TASSEL_3 + ID_0 + TACLR;           // Select INCLK which is the pinosc in this case
+    TA0CTL |= MC_2;				// Start Timer
+    delay(15000);				// Make artificial delay to capture capacitive sensing oscillator edges while SMCLK runs TimerA
 
-    TA0CCTL0 |= CCIFG;
     TA0CTL &= ~MC_2;                    	// Halt Timer
-    meas_cnt = TA0CCR0;
-    P2SEL2 &= ~BIT3;           				// Clear target Pin Oscillator
-    _EINT();
+    meas_cnt = TAR;                             // Current TimerA Register holds # of edges captures of pin oscillator
+    P2SEL2 &= ~BIT3;           			// Clear target Pin Oscillator on P2.3
+    _EINT();					// Re-enable interrupts
+}
+
+/******************************************************************************/
+void measure_baseline(void)
+{
+  measure_count();              // Establish baseline capacitance
+    base_cnt = meas_cnt;
+
+  for(i=15; i>0; i--)           // Repeat and avg base measurement
+  {
+    measure_count();
+      base_cnt = (meas_cnt+base_cnt)/2;
+  }
 }
 
 /******************************************************************************/
@@ -538,24 +581,27 @@ __interrupt void ISR_WDT(void)
   if(capsense==OFF && LEDState==ON && !(hour24==7 || hour24==18))
   {
     timer++;
+      if(timer==LightTime)
+        {
+          LEDState=OFF;
+          capsense=ON;
+          timer=0;
+          MoonOff();
+          SunOff();
+          delay(1000);
+        }
   }
-  if(timer==LightTime)
-  {
-    LEDState=OFF;
-    timer=0;
-    capsense=ON;
-    MoonOff();
-    SunOff();
-  }
+
   if(hour24==7 || hour24==18)
   {
 	  LEDState=ON;
+          capsense=OFF;
   }
   if((hour24==8 && minute==0 && second==0) || (hour24==19 && minute==0 && second==0))
   {
           LEDState=OFF;
           capsense=ON;
-          timer =0;
+          timer=0;
           MoonOff();
           SunOff();
   }
