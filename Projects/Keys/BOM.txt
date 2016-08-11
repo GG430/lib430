@@ -1,0 +1,45 @@
+BOM
+
+Exported from Keys 1V0
+
+Part     Value                 Package         Library              Position (mm)         Orientation
+
+R1       47k                   R0805           rcl                  (15.748 18.034)       MR270
+R2       470                   R0805           rcl                  (4.826 3.302)         MR180
+R3       470                   R0805           rcl                  (13.97 3.302)         MR0
+R4       27                    R0805           rcl                  (7.112 36.576)        MR180
+R5       27                    R0805           rcl                  (12.446 37.846)       MR270
+R6       1k4                   R0805           rcl                  (9.906 35.687)        MR270
+R7       1M                    R0805           rcl                  (9.652 39.37)         MR90
+C1       1n                    C0805           rcl                  (14.986 21.59)        MR180
+C2       10u                   R/2012-12R      rcl                  (3.302 28.194)        MR0
+C3       100n                  C0805           rcl                  (2.794 15.494)        MR270
+C4       10u                   R/2012-12R      rcl                  (14.732 32.512)       MR0
+C5       220n                  C0805           rcl                  (14.478 28.702)       MR180
+C6       220n                  C0805           rcl                  (14.986 30.48)        MR180
+C7       470n                  C0805           rcl                  (14.732 12.192)       MR180
+C8       100n                  C0805           rcl                  (3.048 37.338)        MR0
+C9       100n                  C0805           rcl                  (3.048 31.242)        MR180
+C10      10p                   C0805           rcl                  (13.462 34.798)       MR180
+C11      10p                   C0805           rcl                  (7.112 34.798)        MR0
+IC1      F5509                 PT48            TI MSP               (9.398 16.891)        MR0
+JP1      JTAG                  1X04S           pinheader            (13.335 7.874)        MR0
+LDO      TLV70033DDC           SOT23-5         LDOs                 (2.794 34.29)         MR180
+OK       green                 CHIPLED_0805    led                  (14.097 3.175)        R270
+ON       red                   CHIPLED_0805    led                  (4.699 3.175)         R90
+Q1       PIEZO_CSTCR4M00G15L99 CSTCR6M         murata               (12.192 25.4)         MR180
+S0       HDKJ                  HDKJ            Taster               (4.953 33.401)        R0
+S1       HDKJ                  HDKJ            Taster               (13.843 33.401)       R0
+S2       HDKJ                  HDKJ            Taster               (4.953 27.051)        R0
+S3       HDKJ                  HDKJ            Taster               (13.843 27.051)       R0
+S4       HDKJ                  HDKJ            Taster               (4.953 20.701)        R180
+S5       HDKJ                  HDKJ            Taster               (13.843 20.7645)      R0
+S6       HDKJ                  HDKJ            Taster               (4.953 14.351)        R0
+S7       HDKJ                  HDKJ            Taster               (13.843 14.351)       R0
+S8       HDKJ                  HDKJ            Taster               (4.953 8.001)         R0
+S9       HDKJ                  HDKJ            Taster               (13.843 8.001)        R0
+SJ1      LDO Bridge            SJ_M            jumper               (1.27 34.036)         R270
+SJ2      Z                     SJ_M            jumper               (5.334 10.668)        MR90
+X1       USB-A                 MOLEX_480371000 USB                  (9.398 40.513)        R180
+
+EAGLE Version 7.6.0 Copyright (c) 1988-2016 CadSoft
