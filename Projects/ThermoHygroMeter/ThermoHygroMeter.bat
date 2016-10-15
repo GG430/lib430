@@ -7,7 +7,7 @@ ECHO.
 ECHO Programming ThermoHygroMeter 430 txt
 ECHO.
 
-C:\ti\MSP430Flasher_1.3.3\MSP430Flasher.exe -n MSP430G2553 -e ERASE_MAIN -w ".\Release\Exe\ThermoHygroMeter.txt" -g -z [VCC]
+C:\ti\MSP430Flasher_1.3.7\MSP430Flasher.exe -n MSP430G2553 -e ERASE_MAIN -w ".\Release\Exe\ThermoHygroMeter.txt" -g -z [VCC]
 
 ECHO.
 SET /P ENTER=Hit Enter to Exit
